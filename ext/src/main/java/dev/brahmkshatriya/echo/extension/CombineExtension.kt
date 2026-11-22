@@ -363,7 +363,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
                     if (!seenTracks.add(candidate.id)) continue
                     val loaded = tryProvider { trackClient.loadTrack(candidate, isDownload) }
                     note("Loaded ${candidate.title}: servers=${loaded?.servers?.size ?: 0}, streamables=${loaded?.streamables?.size ?: 0}")
-                    if (loaded != null && loaded.streamables.isNotEmpty()) {
+                    if (loaded != null && loaded.servers.isNotEmpty()) {
                         return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id)
                     }
                 }
@@ -402,7 +402,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
                             if (!seenTracks.add(candidate.id)) continue
                             val loaded = tryProvider { trackClient.loadTrack(candidate, isDownload) }
                             note("Album track ${candidate.title}: servers=${loaded?.servers?.size ?: 0}, streamables=${loaded?.streamables?.size ?: 0}")
-                            if (loaded != null && loaded.streamables.isNotEmpty()) {
+                            if (loaded != null && loaded.servers.isNotEmpty()) {
                                 return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id)
                             }
                         }
