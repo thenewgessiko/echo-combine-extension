@@ -296,7 +296,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         val matchData = Json.encodeToString(Track(metadata.id, metadata.title, artists = metadata.artists, duration = metadata.duration))
         return loaded.copy(streamables = loaded.streamables.map { stream ->
             stream.copy(
-                title = "[$providerName]" + (stream.title?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""),
+                title = providerName + (stream.title?.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""),
                 extras = stream.extras + mapOf(
                 STREAM_EXT_ID to extensionId,
                 ORIGINAL_STREAM to Json.encodeToString(stream),
