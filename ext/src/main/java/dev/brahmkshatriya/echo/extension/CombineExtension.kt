@@ -307,20 +307,34 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         if (query.isEmpty()) return@tryProvider null
 
         val feed = searchClient.loadSearchFeed(query)
-        // ponytail: search only the first page; add bounded pagination if providers hide exact matches later.
-        val shelves = feed.getPagedData(feed.notSortTabs.firstOrNull()).pagedData.loadPage(null).data
-        val candidates = shelves.flatMap { shelf ->
-            when (shelf) {
-                is Shelf.Item -> listOfNotNull(shelf.media as? Track)
-                is Shelf.Lists.Tracks -> shelf.list
-                is Shelf.Lists.Items -> shelf.list.filterIsInstance<Track>()
-                else -> emptyList()
-            }
-        }
-        for (candidate in candidates.filter { matches(it, metaTrack) }) {
-            val loaded = tryProvider { trackClient.loadTrack(candidate, isDownload) }
-            if (loaded != null && loaded.servers.isNotEmpty()) {
-                return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id)
+        // Search a bounded number of pages across available search tabs.
+        // Keep the provider order and the original strict track-matching rules.
+        val tabs = feed.notSortTabs.ifEmpty { listOfNotNull(feed.tabs.firstOrNull()) }
+        val seen = mutableSetOf<String>()
+        for (tab in tabs.take(4)) {
+            val paged = tryProvider { feed.getPagedData(tab).pagedData } ?: continue
+            var cursor: String? = null
+            val visitedCursors = mutableSetOf<String>()
+            for (pageNumber in 0 until 3) {
+                val page = tryProvider { paged.loadPage(cursor) } ?: break
+                val candidates = page.data.flatMap { shelf ->
+                    when (shelf) {
+                        is Shelf.Item -> listOfNotNull(shelf.media as? Track)
+                        is Shelf.Lists.Tracks -> shelf.list
+                        is Shelf.Lists.Items -> shelf.list.filterIsInstance<Track>()
+                        else -> emptyList()
+                    }
+                }
+                for (candidate in candidates.filter { matches(it, metaTrack) }) {
+                    if (!seen.add(candidate.id)) continue
+                    val loaded = tryProvider { trackClient.loadTrack(candidate, isDownload) }
+                    if (loaded != null && loaded.servers.isNotEmpty()) {
+                        return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id)
+                    }
+                }
+                val next = page.continuation ?: break
+                if (!visitedCursors.add(next)) break
+                cursor = next
             }
         }
         null
