@@ -311,15 +311,27 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         val searchClient = streamExt.client<SearchFeedClient>()
         val trackClient = streamExt.client<TrackClient>()
         val artistName = metaTrack.artists.firstOrNull()?.name.orEmpty()
-        val query = "${cleanTitle(metaTrack.title)} $artistName".trim()
-        if (query.isEmpty()) return@tryProvider null
-
-        note("Query: $query")
-        val feed = searchClient.loadSearchFeed(query)
+        val title = cleanTitle(metaTrack.title)
+        val albumTitle = metaTrack.album?.title.orEmpty()
+        val queries = listOf(
+            "$title $artistName",
+            title,
+            "$albumTitle $artistName",
+            albumTitle,
+            title.substringBeforeLast(" - ", title),
+            artistName
+        ).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val seenTracks = mutableSetOf<String>()
+        for ((queryIndex, query) in queries.withIndex()) {
+        note("Query ${queryIndex + 1}/${queries.size}: $query")
+        val feed = tryProvider { searchClient.loadSearchFeed(query) }
+        if (feed == null) {
+            note("Search feed unavailable")
+            continue
+        }
         note("Search feed received")
         val tabs = (listOf(null) + feed.notSortTabs).distinct()
         note("Search tabs: total=${tabs.size}, notSort=${feed.notSortTabs.size}, regular=${feed.tabs.size}")
-        val seenTracks = mutableSetOf<String>()
         val albums = linkedMapOf<String, Album>()
 
         // Prefer direct track matches before attempting album-based resolution.
@@ -413,7 +425,8 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
                 }
             }
         }
-        note("No playable match found")
+        }
+        note("No playable match found after ${queries.size} search strategies")
         null
     }
 
