@@ -309,7 +309,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         val feed = searchClient.loadSearchFeed(query)
         // Search a bounded number of pages across available search tabs.
         // Keep the provider order and the original strict track-matching rules.
-        val tabs = feed.notSortTabs.ifEmpty { listOfNotNull(feed.tabs.firstOrNull()) }
+        val tabs = (listOf(null) + feed.notSortTabs).distinct()
         val seen = mutableSetOf<String>()
         for (tab in tabs.take(4)) {
             val paged = tryProvider { feed.getPagedData(tab).pagedData } ?: continue

@@ -2,7 +2,9 @@ name: tests
 
 on:
   push:
+    branches: [main, nightly]
   pull_request:
+    branches: [main, nightly]
 
 permissions:
   contents: read
