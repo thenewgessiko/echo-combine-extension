@@ -322,7 +322,8 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         val tabs = (listOf(null) + feed.notSortTabs).distinct()
         note("Search tabs: total=${tabs.size}, notSort=${feed.notSortTabs.size}, regular=${feed.tabs.size}")
         val seen = mutableSetOf<String>()
-        for (tab in tabs.take(4)) {
+        // Inspect every advertised search tab; Deezer may expose tracks after the first four.
+        for (tab in tabs) {
             note("Opening tab: ${tab?.toString()?.take(100) ?: "default"}")
             val paged = tryProvider { feed.getPagedData(tab).pagedData }
             if (paged == null) {
@@ -348,7 +349,16 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
                         else -> emptyList()
                     }
                 }
-                note("Page candidates: ${candidates.size}; matched: ${candidates.count { matches(it, metaTrack) }}")
+                // Report the media types inside generic Items shelves. A provider can
+                // return album/artist/media wrappers instead of direct Track objects.
+                if (diagnostics != null) {
+                    page.data.filterIsInstance<Shelf.Lists.Items>().forEach { shelf ->
+                        note("Items content: count=${shelf.list.size}, types=" +
+                            shelf.list.groupingBy { it.javaClass.simpleName }.eachCount().entries
+                                .joinToString(",") { "${it.key}:${it.value}" }.take(140))
+                    }
+                    note("Page candidates: ${candidates.size}; matched: ${candidates.count { matches(it, metaTrack) }}")
+                }
                 for (candidate in candidates.filter { matches(it, metaTrack) }) {
                     if (!seen.add(candidate.id)) continue
                     val loaded = tryProvider { trackClient.loadTrack(candidate, isDownload) }
