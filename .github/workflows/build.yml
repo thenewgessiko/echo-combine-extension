@@ -1,4 +1,4 @@
-name: releases
+name: MAIN build
 
 on:
   push:
@@ -55,24 +55,12 @@ jobs:
       - name: Prepare release metadata
         run: bash .github/scripts/prepare-release.sh
 
-      - name: Build signed extension
-        env:
-          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
-          STORE_PASSWORD: ${{ secrets.PASSWORD }}
+      - name: Build extension
         run: |
-          set -euo pipefail
-          : "${KEYSTORE_B64:?Set the KEYSTORE_B64 repository secret}"
-          : "${STORE_PASSWORD:?Set the PASSWORD repository secret}"
-          printf '%s' "$KEYSTORE_B64" | base64 -d > "$GITHUB_WORKSPACE/signing-key.jks"
-          chmod 600 "$GITHUB_WORKSPACE/signing-key.jks"
           bash ./gradlew :app:assembleDebug --no-daemon \
             "-PextVersionName=$VERSION" \
             "-PextName=$EXT_NAME" \
-            "-PextUpdateUrl=$UPDATE_URL" \
-            "-Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/signing-key.jks" \
-            "-Pandroid.injected.signing.store.password=$STORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias=key0 \
-            "-Pandroid.injected.signing.key.password=$STORE_PASSWORD"
+            "-PextUpdateUrl=$UPDATE_URL"
           cp app/build/outputs/apk/debug/app-debug.apk "$APP_PATH"
 
       - name: Upload extension artifact
@@ -81,19 +69,3 @@ jobs:
           name: echo-combine-${{ env.VERSION }}
           path: ${{ env.APP_PATH }}
           if-no-files-found: error
-
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.VERSION }}
-          target_commitish: ${{ env.COMMIT_SHA }}
-          name: ${{ env.VERSION }}
-          prerelease: ${{ env.BUILD_BRANCH == 'nightly' }}
-          make_latest: ${{ env.BUILD_BRANCH == 'main' && 'true' || 'false' }}
-          body_path: ${{ env.NOTES_PATH }}
-          files: ${{ env.APP_PATH }}
-          fail_on_unmatched_files: true
-
-      - name: Remove signing key
-        if: always()
-        run: rm -f "$GITHUB_WORKSPACE/signing-key.jks"
