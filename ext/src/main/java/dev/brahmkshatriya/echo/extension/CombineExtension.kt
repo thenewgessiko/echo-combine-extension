@@ -52,6 +52,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         const val KEY_METADATA_EXT = "metadata_extension"
         const val KEY_STREAM_EXT = "stream_extension"
         const val KEY_FIRST_AVAILABLE = "first_available"
+        const val KEY_DIAGNOSTICS = "combine_diagnostics"
         private const val STREAM_EXT_ID = "stream_ext_id"
         private const val ORIGINAL_STREAM = "combine_original_stream"
         private const val MATCH_TRACK = "combine_match_track"
@@ -92,6 +93,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
                 "Return only streams from the highest priority extension that finds the track",
                 false
             ),
+            SettingSwitch("Diagnostic Mode (DEV)", KEY_DIAGNOSTICS, "Show search details in Echo error reports when no audio is found", false),
             SettingList(
                 "Preferred Stream Extension",
                 KEY_STREAM_EXT,
@@ -222,12 +224,14 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         val streamExts = getStreamExtensions()
         val isFirstAvailable = settings.getBoolean(KEY_FIRST_AVAILABLE) == true
 
+        val diagnostics = if (settings.getBoolean(KEY_DIAGNOSTICS) == true) mutableListOf<String>() else null
+        diagnostics?.add("Selected: " + streamExts.joinToString(" -> ") { it.name })
         val allStreamables = if (isFirstAvailable) {
-            selectFirstFound(metaTrack, streamExts, isDownload)
+            selectFirstFound(metaTrack, streamExts, isDownload, diagnostics)
         } else {
             coroutineScope {
                 streamExts.map { ext ->
-                    async { findTrackInStreamExtension(metaTrack, ext, isDownload)?.streamables.orEmpty().sortedByDescending { it.quality } }
+                    async { findTrackInStreamExtension(metaTrack, ext, isDownload, diagnostics)?.streamables.orEmpty().sortedByDescending { it.quality } }
                 }.awaitAll().flatten()
             }
         }.let { streams ->
@@ -235,16 +239,18 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
             streams.mapIndexed { index, stream -> stream.copy(quality = streams.size - index) }
         }
 
+        if (allStreamables.isEmpty() && diagnostics != null) throw IllegalStateException("Combine DEV diagnostics:\n" + diagnostics.joinToString("\n").take(4000))
         return metaTrack.copy(streamables = allStreamables)
     }
 
     private suspend fun selectFirstFound(
         metaTrack: Track,
         exts: List<MusicExtension>,
-        isDownload: Boolean
+        isDownload: Boolean,
+        diagnostics: MutableList<String>? = null
     ): List<Streamable> {
         for (ext in exts) {
-            val streams = findTrackInStreamExtension(metaTrack, ext, isDownload)?.streamables
+            val streams = findTrackInStreamExtension(metaTrack, ext, isDownload, diagnostics)?.streamables
             if (!streams.isNullOrEmpty()) return streams.sortedByDescending { it.quality }
         }
         return emptyList()
@@ -299,14 +305,18 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
 
     override suspend fun loadFeed(track: Track): Feed<Shelf>? = getMetadataExtension().client<TrackClient>().loadFeed(track)
 
-    private suspend fun findTrackInStreamExtension(metaTrack: Track, streamExt: MusicExtension, isDownload: Boolean): Track? = tryProvider {
+    private suspend fun findTrackInStreamExtension(metaTrack: Track, streamExt: MusicExtension, isDownload: Boolean, diagnostics: MutableList<String>? = null): Track? = tryProvider {
+        fun note(message: String) { diagnostics?.let { synchronized(it) { it.add("[${streamExt.name}] $message") } } }
+        note("Starting provider search")
         val searchClient = streamExt.client<SearchFeedClient>()
         val trackClient = streamExt.client<TrackClient>()
         val artistName = metaTrack.artists.firstOrNull()?.name.orEmpty()
         val query = "${cleanTitle(metaTrack.title)} $artistName".trim()
         if (query.isEmpty()) return@tryProvider null
 
+        note("Query: $query")
         val feed = searchClient.loadSearchFeed(query)
+        note("Search feed received")
         // Search a bounded number of pages across available search tabs.
         // Keep the provider order and the original strict track-matching rules.
         val tabs = (listOf(null) + feed.notSortTabs).distinct()
@@ -325,9 +335,11 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
                         else -> emptyList()
                     }
                 }
+                note("Page candidates: ${candidates.size}; matched: ${candidates.count { matches(it, metaTrack) }}")
                 for (candidate in candidates.filter { matches(it, metaTrack) }) {
                     if (!seen.add(candidate.id)) continue
                     val loaded = tryProvider { trackClient.loadTrack(candidate, isDownload) }
+                    note("Loaded ${candidate.title}: servers=${loaded?.servers?.size ?: 0}, streamables=${loaded?.streamables?.size ?: 0}")
                     if (loaded != null && loaded.servers.isNotEmpty()) {
                         return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id)
                     }
@@ -337,6 +349,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
                 cursor = next
             }
         }
+        note("No playable match found")
         null
     }
 
