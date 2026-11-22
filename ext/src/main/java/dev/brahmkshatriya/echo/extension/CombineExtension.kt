@@ -320,13 +320,26 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         // Search a bounded number of pages across available search tabs.
         // Keep the provider order and the original strict track-matching rules.
         val tabs = (listOf(null) + feed.notSortTabs).distinct()
+        note("Search tabs: total=${tabs.size}, notSort=${feed.notSortTabs.size}, regular=${feed.tabs.size}")
         val seen = mutableSetOf<String>()
         for (tab in tabs.take(4)) {
-            val paged = tryProvider { feed.getPagedData(tab).pagedData } ?: continue
+            note("Opening tab: ${tab?.toString()?.take(100) ?: "default"}")
+            val paged = tryProvider { feed.getPagedData(tab).pagedData }
+            if (paged == null) {
+                note("Unable to open tab")
+                continue
+            }
             var cursor: String? = null
             val visitedCursors = mutableSetOf<String>()
             for (pageNumber in 0 until 3) {
-                val page = tryProvider { paged.loadPage(cursor) } ?: break
+                val page = tryProvider { paged.loadPage(cursor) }
+                if (page == null) {
+                    note("Unable to load page ${pageNumber + 1}")
+                    break
+                }
+                note("Page ${pageNumber + 1}: shelves=${page.data.size}, types=" +
+                    page.data.groupingBy { it.javaClass.simpleName }.eachCount().entries
+                        .joinToString(",") { "${it.key}:${it.value}" }.take(240))
                 val candidates = page.data.flatMap { shelf ->
                     when (shelf) {
                         is Shelf.Item -> listOfNotNull(shelf.media as? Track)
