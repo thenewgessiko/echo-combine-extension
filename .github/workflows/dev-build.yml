@@ -19,7 +19,16 @@ jobs:
           java-version: '21'
           cache: gradle
       - name: Test
-        run: bash ./gradlew :ext:check --no-daemon
+        run: bash ./gradlew :ext:check --no-daemon --stacktrace --info
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Combine-Test-Reports-${{ github.run_number }}
+          path: |
+            ext/build/test-results/test/**
+            ext/build/reports/tests/test/**
+          if-no-files-found: warn
       - name: Build debug extension
         run: bash ./gradlew :app:assembleDebug --no-daemon -PextVersionName=dev-${{ github.run_number }} -PextUpdateUrl=
       - name: Package extension
