@@ -317,12 +317,12 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         note("Query: $query")
         val feed = searchClient.loadSearchFeed(query)
         note("Search feed received")
-        // Search a bounded number of pages across available search tabs.
-        // Keep the provider order and the original strict track-matching rules.
         val tabs = (listOf(null) + feed.notSortTabs).distinct()
         note("Search tabs: total=${tabs.size}, notSort=${feed.notSortTabs.size}, regular=${feed.tabs.size}")
-        val seen = mutableSetOf<String>()
-        // Inspect every advertised search tab; Deezer may expose tracks after the first four.
+        val seenTracks = mutableSetOf<String>()
+        val albums = linkedMapOf<String, Album>()
+
+        // Prefer direct track matches before attempting album-based resolution.
         for (tab in tabs) {
             note("Opening tab: ${tab?.toString()?.take(100) ?: "default"}")
             val paged = tryProvider { feed.getPagedData(tab).pagedData }
@@ -341,35 +341,76 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
                 note("Page ${pageNumber + 1}: shelves=${page.data.size}, types=" +
                     page.data.groupingBy { it.javaClass.simpleName }.eachCount().entries
                         .joinToString(",") { "${it.key}:${it.value}" }.take(240))
-                val candidates = page.data.flatMap { shelf ->
+
+                val media = page.data.flatMap { shelf ->
                     when (shelf) {
-                        is Shelf.Item -> listOfNotNull(shelf.media as? Track)
+                        is Shelf.Item -> listOf(shelf.media)
                         is Shelf.Lists.Tracks -> shelf.list
-                        is Shelf.Lists.Items -> shelf.list.filterIsInstance<Track>()
+                        is Shelf.Lists.Items -> shelf.list
                         else -> emptyList()
                     }
                 }
-                // Report the media types inside generic Items shelves. A provider can
-                // return album/artist/media wrappers instead of direct Track objects.
-                if (diagnostics != null) {
-                    page.data.filterIsInstance<Shelf.Lists.Items>().forEach { shelf ->
-                        note("Items content: count=${shelf.list.size}, types=" +
-                            shelf.list.groupingBy { it.javaClass.simpleName }.eachCount().entries
-                                .joinToString(",") { "${it.key}:${it.value}" }.take(140))
-                    }
-                    note("Page candidates: ${candidates.size}; matched: ${candidates.count { matches(it, metaTrack) }}")
+                media.filterIsInstance<Album>().forEach { album ->
+                    if (albums.size < 8) albums.putIfAbsent(album.id, album)
                 }
+                if (diagnostics != null) {
+                    note("Media types: " + media.groupingBy { it.javaClass.simpleName }
+                        .eachCount().entries.joinToString(",") { "${it.key}:${it.value}" }.take(180))
+                }
+                val candidates = media.filterIsInstance<Track>()
+                note("Page candidates: ${candidates.size}; matched: ${candidates.count { matches(it, metaTrack) }}")
                 for (candidate in candidates.filter { matches(it, metaTrack) }) {
-                    if (!seen.add(candidate.id)) continue
+                    if (!seenTracks.add(candidate.id)) continue
                     val loaded = tryProvider { trackClient.loadTrack(candidate, isDownload) }
                     note("Loaded ${candidate.title}: servers=${loaded?.servers?.size ?: 0}, streamables=${loaded?.streamables?.size ?: 0}")
-                    if (loaded != null && loaded.servers.isNotEmpty()) {
+                    if (loaded != null && loaded.streamables.isNotEmpty()) {
                         return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id)
                     }
                 }
                 val next = page.continuation ?: break
                 if (!visitedCursors.add(next)) break
                 cursor = next
+            }
+        }
+
+        note("Direct search exhausted; album candidates=${albums.size}")
+        val albumClient = streamExt.clientOrNull<AlbumClient>()
+        if (albumClient == null) {
+            note("AlbumClient unavailable")
+        } else {
+            for (album in albums.values) {
+                note("Opening album: ${album.title.take(90)}")
+                val loadedAlbum = tryProvider { albumClient.loadAlbum(album) }
+                if (loadedAlbum == null) {
+                    note("Unable to load album")
+                    continue
+                }
+                val trackFeed = tryProvider { albumClient.loadTracks(loadedAlbum) }
+                if (trackFeed == null) {
+                    note("Album tracks unavailable")
+                    continue
+                }
+                val albumTabs = (listOf(null) + trackFeed.notSortTabs).distinct()
+                for (tab in albumTabs) {
+                    val paged = tryProvider { trackFeed.getPagedData(tab).pagedData } ?: continue
+                    var cursor: String? = null
+                    val visitedCursors = mutableSetOf<String>()
+                    for (pageNumber in 0 until 3) {
+                        val page = tryProvider { paged.loadPage(cursor) } ?: break
+                        note("Album ${album.title.take(40)} page ${pageNumber + 1}: tracks=${page.data.size}, matched=${page.data.count { matches(it, metaTrack) }}")
+                        for (candidate in page.data.filter { matches(it, metaTrack) }) {
+                            if (!seenTracks.add(candidate.id)) continue
+                            val loaded = tryProvider { trackClient.loadTrack(candidate, isDownload) }
+                            note("Album track ${candidate.title}: servers=${loaded?.servers?.size ?: 0}, streamables=${loaded?.streamables?.size ?: 0}")
+                            if (loaded != null && loaded.streamables.isNotEmpty()) {
+                                return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id)
+                            }
+                        }
+                        val next = page.continuation ?: break
+                        if (!visitedCursors.add(next)) break
+                        cursor = next
+                    }
+                }
             }
         }
         note("No playable match found")
