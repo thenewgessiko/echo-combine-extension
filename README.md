@@ -1,5 +1,5 @@
 
-# 🎵 Echo Combine Extension ☆
+# 🎵 Echo Combine Extension
 
 [![Latest Release][release-badge]][stable-download]
 [![MAIN Build][main-build-badge]][main-runs]
