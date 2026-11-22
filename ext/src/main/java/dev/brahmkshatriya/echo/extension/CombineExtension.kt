@@ -292,10 +292,12 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         Json.decodeFromString<Streamable>(it)
     } ?: stream.copy(extras = stream.extras - STREAM_EXT_ID)
 
-    private fun wrapStreams(loaded: Track, metadata: Track, extensionId: String): Track {
+    private fun wrapStreams(loaded: Track, metadata: Track, extensionId: String, providerName: String): Track {
         val matchData = Json.encodeToString(Track(metadata.id, metadata.title, artists = metadata.artists, duration = metadata.duration))
         return loaded.copy(streamables = loaded.streamables.map { stream ->
-            stream.copy(extras = stream.extras + mapOf(
+            stream.copy(
+                title = "[$providerName]" + (stream.title?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""),
+                extras = stream.extras + mapOf(
                 STREAM_EXT_ID to extensionId,
                 ORIGINAL_STREAM to Json.encodeToString(stream),
                 MATCH_TRACK to matchData
@@ -376,7 +378,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
                     val loaded = tryProvider { trackClient.loadTrack(candidate, isDownload) }
                     note("Loaded ${candidate.title}: servers=${loaded?.servers?.size ?: 0}, streamables=${loaded?.streamables?.size ?: 0}")
                     if (loaded != null && loaded.servers.isNotEmpty()) {
-                        return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id)
+                        return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id, streamExt.name)
                     }
                 }
                 val next = page.continuation ?: break
@@ -415,7 +417,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
                             val loaded = tryProvider { trackClient.loadTrack(candidate, isDownload) }
                             note("Album track ${candidate.title}: servers=${loaded?.servers?.size ?: 0}, streamables=${loaded?.streamables?.size ?: 0}")
                             if (loaded != null && loaded.servers.isNotEmpty()) {
-                                return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id)
+                                return@tryProvider wrapStreams(loaded, metaTrack, streamExt.id, streamExt.name)
                             }
                         }
                         val next = page.continuation ?: break
