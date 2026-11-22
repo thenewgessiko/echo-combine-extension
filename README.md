@@ -1,309 +1,648 @@
-# Echo Combine Extension
 
-[![Stable release][stable-release-badge]][stable-download]
-[![Nightly channel][nightly-channel-badge]][nightly-download]
-[![Stable build][stable-build-badge]][stable-runs]
-[![Nightly build][nightly-build-badge]][nightly-runs]
-[![Tests][tests-badge]][test-runs]
-[![Android extension][android-badge]][echo]
-[![JDK 21][jdk-badge]][build-docs]
+# 🎵 Echo Combine Extension ☆
 
-**Keep your metadata provider. Choose separate providers for audio.**
+[![Latest Release][release-badge]][stable-download]
+[![MAIN Build][main-build-badge]][main-runs]
+[![DEV Snapshot][dev-build-badge]][dev-runs]
+[![Android][android-badge]][echo]
+[![JDK 21][jdk-badge]][build-from-source]
 
-Combine is a music extension for [Echo][echo]. It uses one provider for browsing and library actions, and other providers for playback.
-For example, Spotify can supply metadata while YouTube Music supplies audio.
+**One metadata provider. Multiple audio sources. One seamless music experience.**
 
-**The metadata provider never supplies playback streams.** Combine discards its stream descriptors and never calls it to resolve streamable media.
+**Combine Extension** is a music extension for [Echo][echo] that separates music metadata from audio playback.
 
-This README describes the current development code. Older published packages can differ from the behavior described here.
+Choose your preferred provider for browsing, searching, albums, playlists, and library management, while using different providers to find and play audio.
 
-[Download stable][stable-download] · [Download nightly][nightly-download] · [Configure](#configuration) · [Build from source](#build-from-source) · [Report a bug][issues]
+For example:
 
-## How it works
+- **Spotify** → Music metadata
+- **Deezer** → Primary audio source
+- **YouTube Music** → First backup source
+- **SoundCloud** → Second backup source
+
+> [!NOTE]
+> Provider priority is fully configurable. The example above represents a recommended configuration, not a mandatory setup.
+
+[**Download Latest Release**][stable-download] · [**Installation**](#-installation) · [**Configuration**](#-configuration) · [**Build from Source**](#-build-from-source) · [**Report an Issue**][issues]
+
+---
+
+## ✨ Features
+
+- **Independent metadata provider** for music browsing and library operations.
+- **Multiple audio providers** with configurable priority.
+- **Universal audio search** using up to six search strategies.
+- **Album-based discovery** when direct track matching fails.
+- **Automatic provider fallback** for supported resolution failures.
+- **First Available Mode** for priority-based playback selection.
+- **Multi-Provider Mode** for collecting streams from several providers.
+- **Strict track matching** to reduce incorrect audio results.
+- **Audio source identification** using the `☆` separator.
+- **Diagnostic Mode (DEV)** for investigating unsuccessful searches.
+- **GitHub Actions builds** for stable and development versions.
+
+---
+
+## 🧩 How It Works
 
 ```text
-Echo → Combine → metadata provider
-                ├─ search, home, library, albums, artists, playlists
-                └─ track details and supported library actions
-
-Track playback → configured audio providers → matching track → audio
+                       Echo
+                         |
+                  Combine Extension
+                         |
+             +-----------+-----------+
+             |                       |
+      Metadata Provider        Audio Providers
+             |                       |
+           Spotify                   |
+             |                +------+------+
+             |                |      |      |
+       Search / Library     Deezer  YTM  SoundCloud
+       Albums / Artists       |      |      |
+       Playlists / Tracks     +------+------+
+             |                       |
+             +-----------+-----------+
+                         |
+                  Track Matching
+                         |
+                 Available Streams
+                         |
+                      Playback
 ```
 
-| Role | Responsibility |
-| --- | --- |
-| Metadata provider | Feeds, search, track details, albums, artists, playlists, and supported library actions. |
-| Preferred audio provider | First choice for track searches and playback streams. |
-| Alternative audio providers | Additional stream choices and fallback sources, in priority order. |
+### Provider Responsibilities
 
-Combine preserves the metadata track's identity and details. It replaces that track's streams with streams from configured audio providers.
+| Provider Role | Responsibility |
+|---|---|
+| **Metadata Provider** | Search, home feed, albums, artists, playlists, track information, and supported library operations. |
+| **Preferred Audio Provider** | Highest-priority source for finding playable audio. |
+| **Alternative Audio Providers** | Additional sources used for stream selection and fallback. |
 
-Library actions depend on the metadata provider's capabilities. Combine cannot add an action that the underlying provider does not support.
+Combine preserves the metadata track's identity and replaces its playback streams with streams discovered through the configured audio providers.
 
-## Download and install
+**The metadata provider is excluded from the audio provider chain.**
 
-| Channel | Source branch | Release tag | Intended use | Automatic updates |
-| --- | --- | --- | --- | --- |
-| [Stable][stable-download] | `main` | `v<commit>` | Published stable builds | Echo's stable release updater |
-| [Nightly][nightly-download] | `nightly` | `nightly-<commit>` | Development and testing | Manual download and import |
+> [!IMPORTANT]
+> Combine cannot provide library actions or playback capabilities that the underlying extensions do not support.
 
-Nightly packages are **GitHub prereleases**. They never become the latest stable release.
+---
 
-Both channels use the extension ID `echo_combine`. Importing one channel replaces the other. They do not install side by side.
-Nightly packages display **Combine Extension Nightly** in Echo.
-
-### Installation
-
-1. Install [Echo][echo].
-2. Install the providers that you want to combine.
-3. Sign in to each provider that requires an account.
-4. Download the `.eapk` asset from the selected release.
-5. Import the file through Echo's extension manager.
-6. Open the Combine settings and select your providers.
-
-Workflow artifacts also contain the `.eapk` package. Extract the artifact ZIP before importing the package into Echo.
-
-Combine does not bypass provider authentication, subscriptions, region restrictions, or missing audio availability.
-
-### Switching channels
-
-To switch to nightly, import a `nightly-<commit>` package. To return to stable, import a package from the [latest stable release][stable-download].
-
-Nightly packages disable automatic updates. Echo resolves GitHub update URLs to the latest stable release, not to the newest prerelease.
-Download and import subsequent nightly packages manually.
-
-## Configuration
-
-Open **Settings → Extensions**, then open the Combine settings.
-
-| Setting | Purpose |
-| --- | --- |
-| **Metadata Extension** | Provider for browsing, track details, and library actions. |
-| **Preferred Stream Extension** | Highest-priority audio provider. `None` disables the audio chain. |
-| **2nd–5th Alternative Stream Extension** | Up to four backup audio providers. Each selected slot reveals the next slot. |
-| **First Available Mode** | Stop searching after the first provider with a playable match. Off by default. |
-
-Audio providers must be enabled and support both search and track loading. The selected metadata provider is not an audio option.
-
-Provider priority follows the settings order. Duplicate selections are ignored. Missing or excluded providers do not block later configured backups.
-An unset slot or `None` ends the priority chain.
-
-Legacy multi-selection settings remain readable, but metadata selections are ignored. After upgrading, select your preferred provider and backup order explicitly.
-
-### Playback modes
-
-| Mode | Search behavior | Streams returned |
-| --- | --- | --- |
-| First Available **on** | Search providers sequentially, in priority order. | Streams from the first provider with a playable match. |
-| First Available **off** | Search configured providers concurrently. | Matching streams from all providers, ordered by provider priority and then provider quality. |
-
-**First Available means highest priority, not fastest response.** It avoids searches of unused backup providers after a successful match.
-
-If no configured audio provider finds a playable match, the track has no streams. Combine never substitutes the metadata provider or an arbitrary installed provider.
-
-## Track matching
-
-Combine compares the complete normalized title and the metadata track's primary artist name. It does not accept title substrings or partial artist names.
-
-Normalization ignores case, punctuation, accents, and featured-artist credits such as `feat.`, `ft.`, and `featuring`.
-Acoustic, live, remix, and other version labels remain part of the title comparison.
-
-| Metadata request | Audio candidate | Result |
-| --- | --- | --- |
-| `Evil Deeds` — Eminem | `Evil` — Eminem | Reject: different complete title. |
-| `Desires (ft. Future)` — Drake | `Desires` — Drake | Accept: featured-artist credit differs. |
-| `Only Love Can Save Me Now - Acoustic` | `Only Love Can Save Me Now` | Reject: the acoustic label is missing. |
-| `Death by Rock and Roll – Acoustic,` | `Death by Rock and Roll (Acoustic)` | Accept: punctuation differs, version matches. |
-| `Song` — John Smith | `Song` — John Doe | Reject: the artist name differs. |
-
-Accepted examples assume matching artist metadata unless the table states an artist difference.
-
-Combine also supports filenames such as `Evil Deeds - Eminem.m4a`. It recognizes `.m4a`, `.mp3`, `.flac`, `.ogg`, `.opus`, `.wav`, and `.aac` suffixes.
-Filename artist text does not override conflicting artist metadata.
-
-Version checks rely on provider titles. Missing or incorrect labels cannot establish which recording a provider actually returns.
-Strict matching can reject valid recordings whose titles differ in ways that normalization does not cover.
-
-## Fallback and limitations
-
-If a provider throws during `loadStreamableMedia`, Combine tries the remaining configured audio providers in priority order.
-Fallback uses the same track-matching rules and never includes the metadata provider.
-
-Provider search, feed-page, and track-loading errors do not prevent other configured providers from working.
-Cancellation remains cancellation. It does not start fallback work.
-
-### What fallback covers
-
-- Provider-side stream resolution failures, including 403/429 errors thrown during resolution.
-- Alternative providers with a matching, playable version of the requested track.
-- Both playback modes.
-
-### What fallback does not cover
-
-- HTTP errors raised later by Echo's player, after a provider returns its media URL.
-- Queue prefetching or cached stream URLs.
-- Matches hidden beyond the first page of the first non-sort search tab.
-- Missing provider features or incorrect provider metadata.
-
-The extension API does not give Combine a callback for later player HTTP failures. Automatic recovery from those failures needs support outside this extension.
-
-### Related issues
-
-| Report | Current development status |
-| --- | --- |
-| [#4: wrong song matching](https://github.com/dutixlf/echo-combine-extension/issues/4) | Regression tests reject shortened-title matches such as `Evil` for `Evil Deeds`. |
-| [#8: title and artist mismatches](https://github.com/dutixlf/echo-combine-extension/issues/8) | Featured-artist normalization and full artist-name comparisons have regression coverage. |
-| [#9: wrong track version](https://github.com/dutixlf/echo-combine-extension/issues/9) | Both reported acoustic requests have tests for matching and safe fallback in both playback modes. |
-| [#7: 403/429 fallback](https://github.com/dutixlf/echo-combine-extension/issues/7) | Partial: provider resolution failures only, not later player HTTP errors. |
-| [#5: slow skipping](https://github.com/dutixlf/echo-combine-extension/issues/5) | Unused backup searches are avoided in First Available mode. Queue prefetch remains unimplemented. |
-| [#6: library crash](https://github.com/dutixlf/echo-combine-extension/issues/6) | No confirmed fix. Separate metadata-provider investigation is still needed. |
-
-These entries describe code coverage, not proof of successful playback on every provider or closure of the GitHub reports.
-
-## Troubleshooting
-
-| Problem | What to check |
-| --- | --- |
-| A track has no audio | Select an enabled audio provider distinct from the metadata provider. Search for the requested version directly in that provider. |
-| A provider is missing from audio settings | Enable it in Echo. The metadata provider and Combine itself are intentionally excluded. |
-| A featured track does not match | Check the full artist name and any remaining version labels. Not every title difference is a featured-artist credit. |
-| Playback fails with 403/429 | Determine whether the provider throws during resolution or Echo's player fails afterward. Only the first case can trigger Combine fallback. |
-| Track skipping is slow | Try First Available mode. Network and provider response times still affect latency. There is no queue prefetch. |
-| A Library item crashes | Check the metadata provider directly. The reported library `loadFeed` crash has no confirmed fix here yet. |
-| A nightly package replaced stable | Both channels share the same extension ID. Import a stable package to switch back. |
-| Nightly does not update automatically | This is intentional. Download and import the next nightly package manually. |
-
-### Report a bug
-
-Open an [issue][issues] with:
-
-- Echo version and Combine version, including the release channel.
-- Metadata provider and audio providers, with their versions and priority order.
-- First Available mode: on or off.
-- Exact track title, artist, and requested version.
-- Reproduction steps and whether the same track works directly in the provider.
-- Relevant error text or a stack trace.
-
-Remove account identifiers, authorization headers, cookies, and URL tokens from logs before posting them.
-
-## Build from source
+## 📥 Installation
 
 ### Requirements
 
-- JDK **21**.
-- Android SDK platform **36** for an Android package.
-- Android SDK build tools **35.0.0** for the configured Android Gradle Plugin.
-- Node.js for the repository automation tests.
-- Git and network access for the first Gradle dependency download.
+- [Echo Music Player][echo]
+- At least one compatible metadata provider
+- At least one separate audio provider
+- An Android device supported by Echo
 
-The Gradle wrapper supplies Gradle. There is no need to install Gradle separately.
-The extension package declares minimum Android API 24. Echo itself can have a higher minimum requirement.
+### Installation Steps
 
-### Get the source
+1. Install **Echo**.
+2. Install and enable your preferred music provider extensions.
+3. Open the [latest Combine Extension release][stable-download].
+4. Download the `.eapk` file from **Assets**.
+5. Open Echo's extension manager.
+6. Import the downloaded `.eapk` package.
+7. Open **Combine Extension** settings.
+8. Configure your metadata and audio providers.
 
-```sh
-git clone https://github.com/dutixlf/echo-combine-extension.git
-cd echo-combine-extension
-git switch nightly
+**Extension ID:** `echo_combine`
+
+> [!NOTE]
+> GitHub Actions artifacts are distributed as ZIP archives. Extract the `.eapk` file before importing it into Echo.
+
+### Updates
+
+Stable versions use the official GitHub Releases endpoint for update checks.
+
+**Official releases:**
+
+https://github.com/thenewgessiko/echo-combine-extension/releases
+
+> [!IMPORTANT]
+> GitHub Actions artifacts are not GitHub Releases. Automatic update checks require a published release with a valid tag.
+
+---
+
+## ⚙️ Configuration
+
+Open **Echo → Settings → Extensions → Combine Extension**.
+
+| Setting | Description |
+|---|---|
+| **Metadata Extension** | Selects the provider used for music metadata and library operations. |
+| **Preferred Stream Extension** | Selects the highest-priority audio provider. |
+| **2nd Alternative Stream Extension** | First backup audio provider. |
+| **3rd Alternative Stream Extension** | Second backup audio provider. |
+| **4th Alternative Stream Extension** | Third backup audio provider. |
+| **5th Alternative Stream Extension** | Fourth backup audio provider. |
+| **First Available Mode** | Returns streams from the first provider with a playable match. |
+| **Diagnostic Mode (DEV)** | Enables additional diagnostic information when searches fail. |
+
+Alternative provider settings appear progressively as preceding providers are configured.
+
+### Recommended Configuration
+
+| Setting | Recommended Value |
+|---|---|
+| Metadata Extension | Spotify |
+| Preferred Stream Extension | Deezer |
+| 2nd Alternative | YouTube Music |
+| 3rd Alternative | SoundCloud |
+| First Available Mode | Enabled |
+| Diagnostic Mode (DEV) | Disabled during normal use |
+
+This configuration prioritizes Deezer while retaining alternative audio sources.
+
+### Provider Priority
+
+```text
+1. Deezer
+   |
+   | No playable match
+   v
+2. YouTube Music
+   |
+   | No playable match
+   v
+3. SoundCloud
+   |
+   | No playable match
+   v
+No audio source found
 ```
 
-Use `git switch main` for stable source. Keep full Git history: the build derives its version code from the commit count.
+Provider order follows the extension settings.
 
-For Android builds, set `ANDROID_HOME` to your SDK directory. Alternatively, set `sdk.dir` in an ignored `local.properties` file.
-The Android SDK is not required for the extension JAR or JVM regression tests.
+Duplicate selections are ignored, and unavailable providers do not prevent later configured backups from being considered.
 
-### Run checks
+---
 
-```sh
+## 🎧 Playback Modes
+
+Combine supports two audio discovery modes.
+
+### First Available Mode — ON
+
+Audio providers are searched sequentially according to their configured priority.
+
+```text
+Deezer
+  |
+  +-- Match found --> Return Deezer streams
+  |
+  +-- No match --> YouTube Music
+                     |
+                     +-- Match found --> Return YTM streams
+                     |
+                     +-- No match --> SoundCloud
+```
+
+**Advantages:**
+
+- Respects provider priority.
+- Avoids unnecessary searches after a successful match.
+- Can reduce search overhead when the preferred provider succeeds.
+
+### First Available Mode — OFF
+
+Configured providers are searched concurrently.
+
+```text
+       Track Request
+             |
+      +------+------+
+      |      |      |
+    Deezer  YTM  SoundCloud
+      |      |      |
+      +------+------+
+             |
+       Matched Streams
+             |
+      Provider Priority
+             |
+        Echo Playback
+```
+
+**Advantages:**
+
+- Collects available streams from multiple providers.
+- Provides additional source choices.
+- Preserves the configured provider order.
+
+> [!NOTE]
+> First Available Mode prioritizes the configured provider order, not whichever provider responds fastest.
+
+---
+
+## 🔎 Universal Audio Search
+
+Combine uses a multi-strategy search system to locate matching audio tracks.
+
+### Search Strategies
+
+Depending on available metadata, Combine attempts:
+
+1. **Track Title + Artist**
+2. **Track Title**
+3. **Album Title + Artist**
+4. **Album Title**
+5. **Simplified Track Title**
+6. **Artist Name**
+
+Empty and duplicate queries are automatically excluded.
+
+### Search Pagination
+
+Combine examines available default and non-sort search tabs.
+
+For each search strategy, it can inspect up to **three pages per examined tab**, depending on the provider's pagination support.
+
+This improves discovery of tracks that are not present in the first search results.
+
+### Album-Based Discovery
+
+When direct track searches fail, Combine can attempt album-based resolution.
+
+```text
+Search Track
+     |
+     v
+Direct Track Matching
+     |
+     +-- Match found --> Load Audio
+     |
+     +-- No match
+           |
+           v
+     Album Candidates
+           |
+           v
+     Open Album
+           |
+           v
+     Search Album Tracks
+           |
+           +-- Match found --> Load Audio
+           |
+           +-- No match --> Continue Search
+```
+
+Album-based discovery requires the audio provider to support the necessary album operations.
+
+The extension limits the number of album candidates and examined pages to keep searches bounded.
+
+---
+
+## 🎯 Track Matching
+
+Combine uses strict matching rules to reduce incorrect playback results.
+
+Track matching considers:
+
+- Normalized track titles.
+- Primary artist identity.
+- Featured-artist credits.
+- Recording version labels.
+- Common audio filename extensions.
+
+### Normalization
+
+Matching ignores differences in:
+
+- Letter case.
+- Punctuation.
+- Accents.
+- Supported featured-artist formatting.
+
+Version labels such as **Acoustic**, **Live**, and **Remix** remain relevant to matching.
+
+### Examples
+
+| Metadata Track | Audio Candidate | Result |
+|---|---|---|
+| `Evil Deeds` | `Evil` | ❌ Rejected |
+| `Desires (ft. Future)` | `Desires` | ✅ Accepted with matching artist |
+| `Song (Acoustic)` | `Song` | ❌ Rejected |
+| `Song - Live` | `Song (Live)` | ✅ Accepted with matching artist |
+| `Song` — Artist A | `Song` — Artist B | ❌ Rejected |
+
+> [!WARNING]
+> Strict matching helps prevent incorrect versions from being selected, but it cannot guarantee that a provider's metadata accurately describes the underlying recording.
+
+---
+
+## 🔄 Automatic Provider Fallback
+
+Combine can retry audio resolution through later configured providers when supported stream resolution fails.
+
+### Supported Cases
+
+- Provider search failures.
+- Missing matching tracks.
+- Track-loading failures.
+- Supported stream resolution exceptions.
+- Provider-side HTTP 403/429 errors raised during stream resolution.
+
+### Limitations
+
+Fallback does **not** automatically recover from:
+
+- HTTP failures raised later by Echo's player.
+- Expired media URLs already returned to Echo.
+- Cached queue entries.
+- Unsupported provider functionality.
+- Incorrect metadata that prevents a valid match.
+
+> [!IMPORTANT]
+> Fallback operates within the extension's available APIs. Errors that occur after Echo's player receives a media URL may require handling outside Combine.
+
+---
+
+## ⭐ Audio Source Identification
+
+Combine adds the provider name to stream labels.
+
+When an original stream title exists, the label uses the **☆** separator.
+
+**Examples:**
+
+```text
+Deezer ☆ FLAC
+YouTube Music ☆ Audio
+SoundCloud ☆ Audio
+```
+
+The actual stream title depends on the audio provider.
+
+Original stream data is preserved internally for playback resolution.
+
+---
+
+## 🐞 Diagnostic Mode (DEV)
+
+Diagnostic Mode provides additional information about audio discovery.
+
+When enabled, Combine records details such as:
+
+- Selected audio providers.
+- Search strategies.
+- Search tabs.
+- Pagination progress.
+- Track candidates.
+- Matching results.
+- Album discovery attempts.
+- Available stream results.
+
+When no playable streams are found, diagnostic information can be included in an Echo error report.
+
+### How to Enable
+
+1. Open Combine Extension settings.
+2. Enable **Diagnostic Mode (DEV)**.
+3. Reproduce the unsuccessful track search.
+4. Inspect the resulting error details.
+5. Disable Diagnostic Mode when troubleshooting is complete.
+
+> [!TIP]
+> Include relevant diagnostic information when reporting search or playback issues. Remove personal information, tokens, and account credentials before sharing logs.
+
+---
+
+## 📦 Development Channels
+
+The repository uses separate branches for stable development and experimental builds.
+
+| Channel | Branch | Workflow | Distribution |
+|---|---|---|---|
+| **Stable** | `main` | MAIN build | GitHub Releases / Actions artifacts |
+| **Development** | `dev` | DEV snapshot | GitHub Actions artifacts |
+| **Nightly** | `nightly` | MAIN build | GitHub Actions artifacts |
+
+### Stable
+
+- Official version numbering, beginning with `1.0.0`.
+- Intended for regular use.
+- Published through GitHub Releases.
+- Supports release-based update checks.
+
+### Development
+
+- Built automatically from the `dev` branch.
+- Uses development version identifiers.
+- Intended for testing and troubleshooting.
+- Distributed as GitHub Actions artifacts.
+- Does not use the stable release update endpoint.
+
+### Nightly
+
+- Uses commit-based nightly identifiers.
+- Intended for experimental testing.
+- Distributed as GitHub Actions artifacts.
+- Automatic stable-release updates are disabled.
+
+> [!NOTE]
+> Development and nightly packages share the extension ID `echo_combine` with stable builds. They are not separate installations.
+
+---
+
+## 🛠️ Build from Source
+
+### Requirements
+
+- **JDK 21**
+- Android SDK
+- Android SDK Platform 36
+- Android SDK Build Tools 35.0.0
+- Git
+- Gradle Wrapper (included)
+- Node.js for repository automation checks
+
+### Clone Repository
+
+```bash
+git clone https://github.com/thenewgessiko/echo-combine-extension.git
+cd echo-combine-extension
+```
+
+### Select a Branch
+
+**Stable:**
+
+```bash
+git switch main
+```
+
+**Development:**
+
+```bash
+git switch dev
+```
+
+### Run Tests
+
+```bash
 bash .github/scripts/test-release-metadata.sh
 node .github/scripts/test-autoassign.mjs
-bash ./gradlew :ext:check :ext:shadowJar
+bash ./gradlew :ext:check --no-daemon
 ```
 
-The regression suite uses fake providers, not live accounts. It covers routing exclusions, matching, version labels, fallback, priority, serialization, and cancellation.
+### Build Extension
 
-Passing tests do not replace playback confirmation with real providers.
-
-### Build an Android package
-
-```sh
-bash ./gradlew :ext:check :app:assembleDebug
+```bash
+bash ./gradlew :app:assembleDebug --no-daemon
 ```
 
-Output: `app/build/outputs/apk/debug/app-debug.apk`.
-Rename or copy the APK with an `.eapk` extension for import into Echo. Local debug packages use Android's debug signing configuration.
+**Output:**
 
-### Build a locally labeled nightly
-
-```sh
-bash ./gradlew :ext:check :ext:shadowJar :app:assembleDebug \
-  "-PextVersionName=nightly-$(git rev-parse --short=7 HEAD)" \
-  "-PextName=Combine Extension Nightly" \
-  "-PextUpdateUrl="
-
-cp app/build/outputs/apk/debug/app-debug.apk app/build/echo_combine-nightly-local.eapk
+```text
+app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The version override applies to both APK metadata and the extension JAR. Without this override, local builds use the `v<commit>` label regardless of the checked-out branch.
+### Package for Echo
 
-To copy the package to an ADB-connected phone:
-
-```sh
-adb push app/build/echo_combine-nightly-local.eapk /sdcard/Download/
+```bash
+mkdir -p dist
+cp app/build/outputs/apk/debug/app-debug.apk dist/Combine-Local.eapk
 ```
 
-Import the file from the phone's Downloads folder through Echo's extension manager.
+The generated `.eapk` can be imported into Echo.
 
-## CI and release workflow
+> [!WARNING]
+> Local debug builds use the Android debug signing configuration. Package compatibility and update behavior can depend on the signing key used.
 
-| Workflow | Trigger | Result |
-| --- | --- | --- |
-| [`test.yml`](.github/workflows/test.yml) | Pushes and pull requests | Automation checks, JVM tests, and extension JAR build. |
-| [`build.yml`](.github/workflows/build.yml) | Push to `main` or `nightly`, manual run, daily schedule | Tests, signed `.eapk`, workflow artifact, and GitHub release. |
-| [`autoassign.yml`](.github/workflows/autoassign.yml) | New or reopened issues and pull requests | Assign unassigned items to `dutixlf`. |
+---
 
-Build badges show the last **push-triggered** release build for each branch. They do not report the daily scheduled run.
-Badges can show an unknown status before their branch or workflow is published.
+## ⚡ GitHub Actions
 
-### Stable and nightly publishing
+### MAIN build
 
-- A push to `main` publishes `v<commit>` as a normal release and marks it latest.
-- A push to `nightly` publishes `nightly-<commit>` as a prerelease with `make_latest: false`.
-- The daily job is scheduled for **00:00 UTC** and checks out `nightly`, not `main`.
-- GitHub can delay scheduled runs. The workflow must exist on the default branch for schedules to activate.
-- A manual run supports either source branch.
-- Rebuilding the same commit updates its existing release. It does not create a new daily version.
-- Release assets identify their source commit. Old releases are not automatically deleted.
+**Workflow:** `.github/workflows/build.yml`
 
-### Repository setup
+Runs on:
 
-1. Enable GitHub Actions for the repository.
-2. Publish the `nightly` branch.
-3. Add the workflows and helper scripts to the default branch, `main`.
-4. Set the `KEYSTORE_B64` and `PASSWORD` repository secrets for signed release builds.
+- Pushes to `main`.
+- Pushes to `nightly`.
+- Manual workflow dispatch.
+- Scheduled nightly execution.
 
-`KEYSTORE_B64` contains the base64-encoded signing keystore. `PASSWORD` supplies the store and key password. The configured key alias is `key0`.
+Performs:
 
-The release workflow requests `contents: write` and removes its generated signing key after the job.
+1. Source checkout.
+2. JDK 21 setup.
+3. Release metadata verification.
+4. Automation checks.
+5. Extension tests.
+6. Release metadata preparation.
+7. Debug extension compilation.
+8. `.eapk` artifact upload.
 
-Autoassignment preserves existing assignees. Its privileged workflow only uses event metadata. It never checks out or executes pull request code.
-Fork maintainers can change the assignee in `autoassign.yml`.
+### DEV snapshot
 
-### Development flow
+**Workflow:** `.github/workflows/dev-build.yml`
 
-Develop and test on `nightly`. Confirm playback with real providers before merging approved changes into `main` for a stable release.
+Runs on:
+
+- Pushes to `dev`.
+- Manual workflow dispatch.
+
+Performs:
+
+1. Source checkout.
+2. JDK 21 setup.
+3. Extension tests.
+4. Diagnostic report upload.
+5. Development debug build.
+6. `.eapk` artifact upload.
+
+### Manual Tests
+
+**Workflow:** `.github/workflows/test.yml`
+
+Runs through manual workflow dispatch.
+
+Includes release metadata checks, automation tests, extension checks, and extension JAR generation.
+
+> [!IMPORTANT]
+> The current build workflows upload artifacts. Publishing an official GitHub Release is a separate step.
+
+---
+
+## 🩺 Troubleshooting
+
+| Problem | Recommended Action |
+|---|---|
+| **No playable audio** | Verify provider selection, availability, and track matching. |
+| **Wrong track version** | Check the exact title, artist, and recording version. |
+| **Deezer cannot find a track** | Enable Diagnostic Mode and inspect search and album discovery results. |
+| **Provider unavailable** | Confirm that the provider extension is installed and enabled. |
+| **Slow track loading** | Try First Available Mode to avoid unnecessary backup searches. |
+| **Playback fails with 403/429** | Determine whether the error occurs during provider resolution or later in Echo's player. |
+| **GitHub release tag missing** | Verify that a stable GitHub Release has been published with a valid tag. |
+| **Development build does not update** | Download and import a newer development artifact manually. |
+
+---
+
+## 🐛 Bug Reports
+
+Found an issue?
+
+[**Open a GitHub Issue**][issues]
+
+Please include:
+
+- Echo version.
+- Combine Extension version.
+- Metadata provider.
+- Audio providers and priority order.
+- First Available Mode status.
+- Diagnostic Mode status.
+- Exact track title and artist.
+- Steps to reproduce.
+- Relevant error messages or stack traces.
+
+**Never share authentication tokens, cookies, private account information, or authorization headers.**
+
+---
+
+## 📜 Credits
+
+**Combine Extension** is based on the original project by [dutixlf](https://github.com/dutixlf/echo-combine-extension).
+
+This fork is developed and maintained by **[TheNewGessiko](https://github.com/thenewgessiko)**.
+
+Special thanks to the original project contributors and the Echo community.
+
+---
+
+## ❤️ Support & Development
+
+For bug reports, suggestions, and improvements, visit the official repository:
+
+**[TheNewGessiko / echo-combine-extension](https://github.com/thenewgessiko/echo-combine-extension)**
+
+Stable releases are available through **GitHub Releases**.
+
+Development snapshots are available through **GitHub Actions**.
+
+**Made with ❤️ by TheNewGessiko**
+
+---
+
+<!-- Reference Links -->
 
 [echo]: https://github.com/brahmkshatriya/echo
-[issues]: https://github.com/dutixlf/echo-combine-extension/issues
-[stable-download]: https://github.com/dutixlf/echo-combine-extension/releases/latest
-[nightly-download]: https://github.com/dutixlf/echo-combine-extension/releases?q=nightly&expanded=true
-[stable-runs]: https://github.com/dutixlf/echo-combine-extension/actions/workflows/build.yml?query=branch%3Amain+event%3Apush
-[nightly-runs]: https://github.com/dutixlf/echo-combine-extension/actions/workflows/build.yml?query=branch%3Anightly+event%3Apush
-[test-runs]: https://github.com/dutixlf/echo-combine-extension/actions/workflows/test.yml?query=branch%3Anightly
-[build-docs]: #build-from-source
-[stable-release-badge]: https://img.shields.io/github/v/release/dutixlf/echo-combine-extension?label=stable&sort=date&color=2ea44f
-[nightly-channel-badge]: https://img.shields.io/badge/nightly-prerelease-f59e0b
-[stable-build-badge]: https://img.shields.io/github/actions/workflow/status/dutixlf/echo-combine-extension/build.yml?branch=main&event=push&label=stable%20build
-[nightly-build-badge]: https://img.shields.io/github/actions/workflow/status/dutixlf/echo-combine-extension/build.yml?branch=nightly&event=push&label=nightly%20build
-[tests-badge]: https://img.shields.io/github/actions/workflow/status/dutixlf/echo-combine-extension/test.yml?branch=nightly&event=push&label=tests
+[issues]: https://github.com/thenewgessiko/echo-combine-extension/issues
+[stable-download]: https://github.com/thenewgessiko/echo-combine-extension/releases/latest
+[main-runs]: https://github.com/thenewgessiko/echo-combine-extension/actions/workflows/build.yml?query=branch%3Amain
+[dev-runs]: https://github.com/thenewgessiko/echo-combine-extension/actions/workflows/dev-build.yml?query=branch%3Adev
+[build-from-source]: #️-build-from-source
+
+<!-- Badges -->
+
+[release-badge]: https://img.shields.io/github/v/release/thenewgessiko/echo-combine-extension?label=stable&color=2ea44f
+[main-build-badge]: https://img.shields.io/github/actions/workflow/status/thenewgessiko/echo-combine-extension/build.yml?branch=main&label=MAIN%20build
+[dev-build-badge]: https://img.shields.io/github/actions/workflow/status/thenewgessiko/echo-combine-extension/dev-build.yml?branch=dev&label=DEV%20snapshot
 [android-badge]: https://img.shields.io/badge/platform-Android-3ddc84?logo=android&logoColor=white
 [jdk-badge]: https://img.shields.io/badge/build-JDK%2021-007396
