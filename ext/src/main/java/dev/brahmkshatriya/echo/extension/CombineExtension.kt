@@ -239,7 +239,13 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
             streams.mapIndexed { index, stream -> stream.copy(quality = streams.size - index) }
         }
 
-        if (allStreamables.isEmpty() && diagnostics != null) throw IllegalStateException("Combine DEV diagnostics:\n" + diagnostics.joinToString("\n").take(4000))
+        if (streamExts.isEmpty()) {
+            throw IllegalStateException(
+                "Combine: no audio providers selected. Configure Preferred Stream Extension " +
+                    "and, optionally, alternative providers in Combine settings."
+            )
+        }
+        if (allStreamables.isEmpty() && diagnostics != null) throw IllegalStateException("Combine diagnostics:\n" + diagnostics.joinToString("\n").take(4000))
         return metaTrack.copy(streamables = allStreamables)
     }
 
@@ -261,31 +267,20 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         val index = extensions.indexOfFirst { it.id == streamable.extras[STREAM_EXT_ID] }
         require(index >= 0) { "Stream has no configured audio provider. Reload the track and check Combine settings." }
         val nativeStream = unwrapStream(streamable)
-        val failure = try {
-            return extensions[index].client<TrackClient>().loadStreamableMedia(nativeStream, isDownload)
-        } catch (error: CancellationException) {
-            throw error
+        // A manually selected server must never silently resolve through another provider.
+        // Otherwise Echo may display Qobuz FLAC while playing another provider's AAC.
+        return try {
+            extensions[index].client<TrackClient>().loadStreamableMedia(nativeStream, isDownload)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
-            error
+            throw IllegalStateException(
+                "Combine: selected provider '${extensions[index].name}' failed to resolve " +
+                    "'${nativeStream.title ?: nativeStream.id}'. No automatic provider fallback was used. " +
+                    "Choose another server explicitly. Cause: ${error.javaClass.simpleName}",
+                error
+            )
         }
-
-        // Retry resolution failures, not HTTP errors raised later by Echo's player.
-        if (streamable.type != Streamable.MediaType.Server) throw failure
-        val matchData = streamable.extras[MATCH_TRACK] ?: throw failure
-        val track = Json.decodeFromString<Track>(matchData)
-        for (extension in extensions.drop(index + 1)) {
-            val loaded = findTrackInStreamExtension(track, extension, isDownload) ?: continue
-            for (server in loaded.servers.sortedByDescending { it.quality }) {
-                try {
-                    return extension.client<TrackClient>().loadStreamableMedia(unwrapStream(server), isDownload)
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (error: Exception) {
-                    if (error !== failure) failure.addSuppressed(error)
-                }
-            }
-        }
-        throw failure
     }
 
     private fun unwrapStream(stream: Streamable): Streamable = stream.extras[ORIGINAL_STREAM]?.let {
