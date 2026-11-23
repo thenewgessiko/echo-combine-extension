@@ -14,8 +14,8 @@ for branch in main nightly; do
   grep -Fxq "COMMIT_SHA=$sha" "$env_file"
   grep -Fq "Commit: \`$sha\`" "$tmp/release-notes.txt"
   if [[ "$branch" == main ]]; then
-    grep -Fxq "VERSION=1.0.0" "$env_file"
-    grep -Fxq "APP_PATH=app/build/echo_combine-1.0.0.eapk" "$env_file"
+    grep -Fxq "VERSION=1.0.1" "$env_file"
+    grep -Fxq "APP_PATH=app/build/echo_combine-1.0.1.eapk" "$env_file"
     grep -Fxq 'EXT_NAME=Combine Extension' "$env_file"
     grep -Fxq "$(grep '^extUpdateUrl=' gradle.properties | sed 's/^extUpdateUrl=/UPDATE_URL=/')" "$env_file"
   else
