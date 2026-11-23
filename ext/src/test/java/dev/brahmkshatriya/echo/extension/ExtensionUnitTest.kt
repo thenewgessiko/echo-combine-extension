@@ -93,7 +93,12 @@ class ExtensionUnitTest {
             .single { it.key == CombineExtension.KEY_STREAM_EXT }.entryValues
         assertEquals(listOf("none", "audio"), choices)
         config.putString("stream_extension", "disabled")
-        assertTrue(combine.loadTrack(track(), false).streamables.isEmpty())
+        try {
+            combine.loadTrack(track(), false)
+            fail("Expected invalid provider configuration")
+        } catch (error: IllegalStateException) {
+            assertTrue(error.message.orEmpty().contains("no audio providers selected"))
+        }
         combine.setMusicExtensions(emptyList())
         assertTrue(combine.getSettingItems().isNotEmpty())
     }
@@ -184,7 +189,7 @@ class ExtensionUnitTest {
     }
 
     @Test
-    fun fallbackStopsAfterAllProvidersFailAndNeverUsesMetadata() = runTest {
+    fun selectedProviderFailureNeverAttemptsBackupOrMetadata() = runTest {
         val primaryFailure = IllegalStateException("HTTP 403")
         val metadata = Provider()
         val audio = Provider(listOf(track())).apply { mediaFailure = primaryFailure }
@@ -194,13 +199,13 @@ class ExtensionUnitTest {
         val stream = combine.loadTrack(track(), false).servers.single()
         try {
             combine.loadStreamableMedia(stream, false)
-            fail("Expected all providers to fail")
+            fail("Expected selected provider failure")
         } catch (error: IllegalStateException) {
-            assertSame(primaryFailure, error)
-            assertEquals(1, error.suppressed.size)
+            assertSame(primaryFailure, error.cause)
+            assertTrue(error.message.orEmpty().contains("No automatic provider fallback"))
         }
         assertEquals(1, audio.streamLoads)
-        assertEquals(1, backup.streamLoads)
+        assertEquals(0, backup.streamLoads)
         assertEquals(0, metadata.streamLoads)
     }
 
@@ -219,7 +224,7 @@ class ExtensionUnitTest {
     }
 
     @Test
-    fun mediaResolutionFallsBackToNextAudioProviderAndPreservesNativePayload() = runTest {
+    fun selectedProviderNeverFallsBackAndPreservesNativePayload() = runTest {
         for (firstAvailable in listOf(false, true)) {
             val config = settings(firstAvailable).apply { putString("stream_extension_1", "backup") }
             val metadata = Provider()
@@ -227,10 +232,15 @@ class ExtensionUnitTest {
             val backup = Provider(listOf(track(id = "backup-track")))
             val combine = combine(config, "metadata" to metadata, "audio" to audio, "backup" to backup)
             val stream = combine.loadTrack(track(), true).servers.first()
-            val media = combine.loadStreamableMedia(stream, true) as Streamable.Media.Server
-            assertEquals("https://test/backup-track", (media.sources.single() as Streamable.Source.Http).request.url)
-            assertEquals(Streamable.server("backup-track", 100, extras = mapOf("token" to "original")), backup.loadedStreamable)
-            assertEquals(true, backup.download)
+            try {
+                combine.loadStreamableMedia(stream, true)
+                fail("Expected selected provider failure")
+            } catch (error: IllegalStateException) {
+                assertSame(audio.mediaFailure, error.cause)
+            }
+            assertEquals(Streamable.server("Evil Deeds", 100, extras = mapOf("token" to "original")), audio.loadedStreamable)
+            assertEquals(true, audio.download)
+            assertEquals(0, backup.streamLoads)
             assertEquals(0, metadata.streamLoads)
         }
     }
@@ -284,7 +294,12 @@ class ExtensionUnitTest {
         for (value in listOf(null, "none", "missing", "metadata")) {
             val config = settings().apply { putString("stream_extension", value) }
             val combine = combine(config, "metadata" to Provider(), "audio" to Provider(listOf(track())))
-            assertTrue(combine.loadTrack(track(), false).servers.isEmpty())
+            try {
+                combine.loadTrack(track(), false)
+                fail("Expected invalid provider configuration: $value")
+            } catch (error: IllegalStateException) {
+                assertTrue(error.message.orEmpty().contains("no audio providers selected"))
+            }
         }
     }
 
@@ -342,7 +357,8 @@ class ExtensionUnitTest {
                     combine.loadStreamableMedia(loaded.servers.single(), false)
                     fail("Fallback substituted studio recording: $title")
                 } catch (error: IllegalStateException) {
-                    assertSame(failure, error)
+                    assertSame(failure, error.cause)
+                    assertTrue(error.message.orEmpty().contains("No automatic provider fallback"))
                 }
                 assertEquals(0, backup.streamLoads)
             }
