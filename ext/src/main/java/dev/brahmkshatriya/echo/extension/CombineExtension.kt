@@ -310,6 +310,23 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
     private suspend fun findTrackInStreamExtension(metaTrack: Track, streamExt: MusicExtension, isDownload: Boolean, diagnostics: MutableList<String>? = null): Track? = tryProvider {
         fun note(message: String) { diagnostics?.let { synchronized(it) { it.add("[${streamExt.name}] $message") } } }
         note("Starting provider search")
+        suspend fun <T> diagnose(operation: String, block: suspend () -> T): T? {
+            return try {
+                block()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                val chain = generateSequence(error as Throwable?) { it.cause }
+                    .take(4)
+                    .joinToString(" <- ") { cause ->
+                        val type = cause.javaClass.simpleName.ifBlank { cause.javaClass.name }
+                        val detail = cause.message?.replace(Regex("\\s+"), " ")?.take(160) ?: "(no message)"
+                        "$type: $detail"
+                    }
+                note("$operation FAILED: $chain")
+                null
+            }
+        }
         val searchClient = streamExt.client<SearchFeedClient>()
         val trackClient = streamExt.client<TrackClient>()
         val artistName = metaTrack.artists.firstOrNull()?.name.orEmpty()
@@ -326,7 +343,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         val seenTracks = mutableSetOf<String>()
         for ((queryIndex, query) in queries.withIndex()) {
         note("Query ${queryIndex + 1}/${queries.size}: $query")
-        val feed = tryProvider { searchClient.loadSearchFeed(query) }
+        val feed = diagnose("Search feed") { searchClient.loadSearchFeed(query) }
         if (feed == null) {
             note("Search feed unavailable")
             continue
@@ -339,7 +356,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         // Prefer direct track matches before attempting album-based resolution.
         for (tab in tabs) {
             note("Opening tab: ${tab?.toString()?.take(100) ?: "default"}")
-            val paged = tryProvider { feed.getPagedData(tab).pagedData }
+            val paged = diagnose("Open tab ${tab?.id ?: "default"}") { feed.getPagedData(tab).pagedData }
             if (paged == null) {
                 note("Unable to open tab")
                 continue
@@ -347,7 +364,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
             var cursor: String? = null
             val visitedCursors = mutableSetOf<String>()
             for (pageNumber in 0 until 3) {
-                val page = tryProvider { paged.loadPage(cursor) }
+                val page = diagnose("Load page ${pageNumber + 1} of ${tab?.id ?: "default"}") { paged.loadPage(cursor) }
                 if (page == null) {
                     note("Unable to load page ${pageNumber + 1}")
                     break
