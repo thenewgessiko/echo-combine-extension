@@ -105,7 +105,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         )
 
         var lastKey = KEY_STREAM_EXT
-        val suffixes = listOf("2nd", "3rd", "4th", "5th")
+        val suffixes = listOf("2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th")
         for (i in suffixes.indices) {
             val value = runCatching { settings.getString(lastKey) }.getOrNull()
             if (value != null && value != "none") {
@@ -163,7 +163,7 @@ class CombineExtension : ExtensionClient, MusicExtensionsProvider,
         }
 
         // Priority Chain: Preferred -> 2nd -> ...
-        for (i in 0..5) {
+        for (i in 0..9) {
             val key = if (i == 0) KEY_STREAM_EXT else "${KEY_STREAM_EXT}_$i"
             val id = runCatching { settings.getString(key) }.getOrNull()
             if (id == null || id == "none") break

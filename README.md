@@ -79,7 +79,7 @@ Open **Settings → Extensions**, then open the Combine settings.
 | --- | --- |
 | **Metadata Extension** | Provider for browsing, track details, and library actions. |
 | **Preferred Stream Extension** | Highest-priority audio provider. `None` disables the audio chain. |
-| **2nd–5th Alternative Stream Extension** | Up to four backup audio providers. Each selected slot reveals the next slot. |
+| **2nd–10th Alternative Stream Extension** | Up to nine backup audio providers. Each selected slot reveals the next slot. |
 | **First Available Mode** | Stop searching after the first provider with a playable match. Off by default. |
 
 Audio providers must be enabled and support both search and track loading. The selected metadata provider is not an audio option.

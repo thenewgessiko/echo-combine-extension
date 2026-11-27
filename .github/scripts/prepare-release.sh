@@ -12,7 +12,7 @@ name=$(grep '^extName=' gradle.properties | cut -d'=' -f2-)
 update_url=$(grep '^extUpdateUrl=' gradle.properties | cut -d'=' -f2-)
 
 case "$BUILD_BRANCH" in
-  main) version="v$hash" ;;
+  main) version="1.0.2" ;;
   nightly)
     version="nightly-$hash"
     name="$name Nightly"
