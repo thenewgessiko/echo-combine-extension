@@ -6,9 +6,11 @@
 [![Android][android-badge]][echo]
 [![JDK 21][jdk-badge]](#build-from-source)
 
-**One metadata provider. Multiple audio providers.**
+**One metadata provider. Up to ten audio providers.**
 
-Combine Extension is a music extension for [Echo][echo] that separates metadata and library operations from audio playback. For example, you can use **Spotify** for metadata, **Deezer** for primary audio, and **YouTube Music** and **SoundCloud** as backups.
+Combine Extension is a music extension for [Echo][echo] that separates metadata and library operations from audio playback. For example, you can use **Spotify** for metadata, **Deezer** for primary audio, and up to nine additional audio providers as alternatives.
+
+Combine supports up to **10 stream providers + 1 metadata provider**, for a total of **11 configurable providers**.
 
 **The metadata provider is not used as an audio provider.** Audio availability, subscriptions, authentication, and regional restrictions still depend on the selected providers.
 
@@ -17,7 +19,9 @@ Combine Extension is a music extension for [Echo][echo] that separates metadata 
 ## Features
 
 - Configurable metadata extension for browsing, search, albums, artists, playlists, and supported library actions.
-- Preferred audio provider and up to nine alternative audio providers.
+- Support for up to **10 stream providers + 1 metadata provider**.
+- One preferred audio provider and up to nine alternative audio providers.
+- Dynamic provider configuration with progressive slot visibility up to the 10th stream provider.
 - **First Available Mode**: search in priority order and stop at the first playable match.
 - **Multi-provider mode**: search configured providers concurrently and collect matching streams.
 - **Universal audio discovery**: up to six search queries, available search tabs, and paginated results.
@@ -33,8 +37,16 @@ Echo → Combine → metadata provider (e.g. Spotify)
                  ├─ Search, home, library, albums, artists, playlists
                  └─ Track details and supported library actions
 
-Playback → preferred audio provider (e.g. Deezer)
-         → alternatives in priority order (e.g. YouTube Music, SoundCloud)
+Playback → preferred audio provider (1st)
+         → alternative audio provider (2nd)
+         → alternative audio provider (3rd)
+         → alternative audio provider (4th)
+         → alternative audio provider (5th)
+         → alternative audio provider (6th)
+         → alternative audio provider (7th)
+         → alternative audio provider (8th)
+         → alternative audio provider (9th)
+         → alternative audio provider (10th)
          → matched track → playable streams
 ```
 
@@ -69,13 +81,28 @@ Open **Echo → Settings → Extensions → Combine Extension**.
 | --- | --- |
 | **Metadata Extension** | Provider for browsing, track information, and supported library actions. |
 | **Preferred Stream Extension** | Highest-priority audio provider; `None` disables the audio chain. |
-| **2nd–10th Alternative Stream Extension** | Up to nine backup audio providers, shown progressively. |
+| **2nd–10th Alternative Stream Extension** | Up to nine alternative audio providers, shown progressively. |
 | **First Available Mode** | Return streams from the first provider with a playable match. |
 | **Diagnostic Mode (DEV)** | Include search details in an Echo error report when no audio is found. |
 
-Example configuration: **Spotify** (metadata) → **Deezer** (preferred audio) → **YouTube Music** → **SoundCloud**.
+### Provider limits
+
+| Provider type | Maximum slots |
+| --- | ---: |
+| Metadata Provider | 1 |
+| Preferred Stream Provider | 1 |
+| Alternative Stream Providers | 9 |
+| **Total Stream Providers** | **10** |
+| **Total Configurable Providers** | **11** |
+
+Example configuration: **Spotify** (metadata) → **Deezer** (preferred audio) → **YouTube Music** → **SoundCloud** → additional audio providers.
 
 The provider order is configurable. Duplicate selections are ignored, and the metadata provider is excluded from audio choices. An unset slot or `None` ends the priority chain.
+
+Additional stream provider slots appear progressively as previous slots are configured, up to the 10th stream provider.
+
+> [!IMPORTANT]
+> The metadata provider is separate from the 10 available stream provider slots.
 
 ### Playback modes
 
@@ -85,6 +112,9 @@ The provider order is configurable. Duplicate selections are ignored, and the me
 | **First Available OFF** | Search configured providers concurrently; return matching streams ordered by provider priority and quality. |
 
 **First Available means highest priority, not fastest network response.**
+
+> [!NOTE]
+> Configuring multiple stream providers with First Available Mode disabled may increase the number of simultaneous network requests.
 
 ## Universal track discovery
 
@@ -115,11 +145,18 @@ Matching is based on provider metadata and cannot guarantee the recording behind
 
 ## Playback fallback and limitations
 
-If an audio provider fails during `loadStreamableMedia`, Combine can try later configured providers for matching playable streams. Search and track-loading failures are also handled without blocking other configured providers.
+During audio discovery, Combine can search alternative providers when a higher-priority provider does not return playable streams. Search and track-loading failures are handled without blocking other configured providers.
 
-**Fallback can handle:** provider-side stream-resolution exceptions, including 403/429 errors raised during resolution.
+Once a stream has been selected, Combine resolves it exclusively through its original audio provider.
 
-**Fallback cannot handle:** HTTP errors raised later by Echo's player, expired cached URLs, queue prefetch, unsupported provider features, or incorrect source metadata.
+**Discovery fallback can handle:** unsuccessful searches, missing tracks, and provider-side failures during audio discovery.
+
+**Discovery fallback cannot handle:** failures during resolution of the selected stream, HTTP errors raised later by Echo's player, expired cached URLs, queue prefetch, unsupported provider features, or incorrect source metadata.
+
+> [!IMPORTANT]
+> **Automatic fallback during stream resolution is disabled.**
+>
+> If the selected audio provider fails during `loadStreamableMedia`, Combine reports the error instead of silently switching to another provider. Users can manually select another available audio source.
 
 > [!NOTE]
 > The extension does not receive callbacks for HTTP failures occurring after Echo's player has received a media URL.
@@ -147,10 +184,11 @@ Disable the mode during normal use. Remove credentials, account identifiers, coo
 | Problem | What to check |
 | --- | --- |
 | No playable audio | Confirm that a separate, enabled audio provider is configured and can play the track directly. |
+| Additional provider slots are missing | Configure the previous stream provider slot to reveal the next available slot. |
 | Wrong recording | Check the full title, artist, and version labels. |
 | Deezer search misses a track | Enable Diagnostic Mode and inspect search and album discovery attempts. |
 | Slow skipping | Try First Available Mode; network latency still applies. |
-| Playback fails with 403/429 | Determine whether resolution failed inside the provider or the player failed afterward. |
+| Playback fails with 403/429 | Check the selected provider and manually select another available audio source if necessary. |
 | `GitHub release tag missing` | Confirm a stable release has been published on GitHub with a valid tag. |
 | DEV build does not update | Download and import a newer DEV artifact manually. |
 
@@ -200,7 +238,7 @@ Local debug builds use Android's debug signing configuration. Signing keys can d
 | [`test.yml`](.github/workflows/test.yml) — **tests** | Manual run | Additional checks and extension JAR build. |
 | [`autoassign.yml`](.github/workflows/autoassign.yml) | New/reopened issues and pull requests | Assign unassigned items according to repository configuration. |
 
-**Release publication is manual:** download the stable workflow artifact, extract its `.eapk`, then create a GitHub Release (for example `v1.0.0`) targeting `main` and attach the `.eapk` asset. The workflow does not automatically publish GitHub Releases.
+**Release publication is manual:** download the stable workflow artifact, extract its `.eapk`, then create a GitHub Release (for example `v1.0.2`) targeting `main` and attach the `.eapk` asset. The workflow does not automatically publish GitHub Releases.
 
 ## Credits
 
