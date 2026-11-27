@@ -17,7 +17,7 @@ Combine Extension is a music extension for [Echo][echo] that separates metadata 
 ## Features
 
 - Configurable metadata extension for browsing, search, albums, artists, playlists, and supported library actions.
-- Preferred audio provider and up to four alternative audio providers.
+- Preferred audio provider and up to nine alternative audio providers.
 - **First Available Mode**: search in priority order and stop at the first playable match.
 - **Multi-provider mode**: search configured providers concurrently and collect matching streams.
 - **Universal audio discovery**: up to six search queries, available search tabs, and paginated results.
@@ -69,7 +69,7 @@ Open **Echo → Settings → Extensions → Combine Extension**.
 | --- | --- |
 | **Metadata Extension** | Provider for browsing, track information, and supported library actions. |
 | **Preferred Stream Extension** | Highest-priority audio provider; `None` disables the audio chain. |
-| **2nd–5th Alternative Stream Extension** | Up to four backup audio providers, shown progressively. |
+| **2nd–10th Alternative Stream Extension** | Up to nine backup audio providers, shown progressively. |
 | **First Available Mode** | Return streams from the first provider with a playable match. |
 | **Diagnostic Mode (DEV)** | Include search details in an Echo error report when no audio is found. |
 
